@@ -10,127 +10,126 @@ import threading
 BOT_TOKEN = "8883109486:AAHn2ZJIcyFPkJZ8By0H0lIBZPR5I6XHmEI"
 CHANNEL_ID = "@under50deals_india"
 EARNKARO_USER_ID = "5726805"
+RENDER_APP_URL = "https://deals-bot-ycme.onrender.com"
 
-# Multi-Store & Multi-Category Feeds
-CATEGORIES = [
+# Verified active deal sources
+FEEDS = [
     {
-        "tag": "⚡ [LOOT DEALS UNDER ₹50]",
-        "query": "loot deals under 50 amazon flipkart",
-        "btn_primary": "🛒 Open Loot Deal",
-        "btn_store": "🛍️ Flipkart Under ₹99",
-        "store_url": f"https://earnkaro.com?r={EARNKARO_USER_ID}&fname=flipkart_deals"
+        "tag": "⚡ [LOOT DEAL ALERT]",
+        "url": "https://www.desidime.com/feed",
+        "btn_title": "🛒 Buy Now / View Deal",
+        "btn_store": "🛍️ Flipkart Store",
+        "store_url": f"https://earnkaro.com?r={EARNKARO_USER_ID}&fname=flipkart"
     },
     {
-        "tag": "🎧 [TECH & ACCESSORIES UNDER ₹99]",
-        "query": "tech accessories under 99 amazon",
-        "btn_primary": "🔥 Grab Tech Loot",
-        "btn_store": "📦 Amazon Tech Deals",
-        "store_url": f"https://earnkaro.com?r={EARNKARO_USER_ID}&fname=amazon_tech"
-    },
-    {
-        "tag": "👕 [FASHION 80-90% OFF STEAL]",
-        "query": "fashion sale discount amazon flipkart",
-        "btn_primary": "👗 View Fashion Deal",
-        "btn_store": "🏷️ 90% Off Fashion Store",
-        "store_url": f"https://earnkaro.com?r={EARNKARO_USER_ID}&fname=fashion_loot"
+        "tag": "🔥 [PRICE DROP OFFER]",
+        "url": "https://news.google.com/rss/search?q=" + quote("amazon loot deal offer price drop") + "&hl=en-IN&gl=IN&ceid=IN:en",
+        "btn_title": "📦 Grab Amazon Deal",
+        "btn_store": "🏷️ Amazon Deals Store",
+        "store_url": f"https://earnkaro.com?r={EARNKARO_USER_ID}&fname=amazon"
     }
 ]
 
-BLOCKED_WORDS = [
-    "titan", "pass", "membership", "subscribe", "coupon code",
-    "voucher", "rummy", "fantasy", "casino", "win real cash", "earning app"
-]
-
+BLOCKED_WORDS = ["rummy", "fantasy", "casino", "win real cash", "earning app", "pass", "membership"]
 posted_urls = set()
 
-def send_telegram_deal(title, item_url, cat):
-    monetized_primary = f"https://earnkaro.com?r={EARNKARO_USER_ID}&fname=deal"
+def send_telegram_deal(title, item_url, feed):
+    monetized_link = f"https://earnkaro.com?r={EARNKARO_USER_ID}&fname=deal"
     
-    caption = (
-        f"{cat['tag']}\n\n"
-        f"🔥 *{title}*\n\n"
-        f"✅ *Verified Low Price Offer!*\n"
-        f"⚡ Direct Link: [Click Here to View]({item_url})\n\n"
-        f"👇 *Niche diye gaye buttons se buy karein aur extra cashback payein:*"
+    clean_title = title.split(" - ")[0].strip()
+    
+    text = (
+        f"{feed['tag']}\n\n"
+        f"🏷️ Offer: {clean_title}\n\n"
+        f"✅ Verified Low Price Deal!\n"
+        f"🔗 Direct Source: {item_url}\n\n"
+        f"👇 Niche diye gaye link se buy karein aur extra cashback payein:"
     )
     
     payload = {
         "chat_id": CHANNEL_ID,
-        "text": caption,
-        "parse_mode": "Markdown",
+        "text": text,
         "disable_web_page_preview": False,
         "reply_markup": {
             "inline_keyboard": [
-                [
-                    {"text": cat["btn_primary"], "url": monetized_primary}
-                ],
-                [
-                    {"text": cat["btn_store"], "url": cat["store_url"]}
-                ]
+                [{"text": feed["btn_title"], "url": monetized_link}],
+                [{"text": feed["btn_store"], "url": feed["store_url"]}]
             ]
         }
     }
     
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     try:
-        res = requests.post(url, json=payload, timeout=10)
+        res = requests.post(url, json=payload, timeout=15)
         return res.status_code == 200
     except Exception as e:
         print("Telegram Send Error:", e)
         return False
 
-def send_test_message():
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": CHANNEL_ID,
-        "text": "🤖 *Deals Bot Online!*\n\nAmazon & Flipkart multi-category deals tracker fully active with auto-cashback links.",
-        "parse_mode": "Markdown"
-    }
-    try:
-        requests.post(url, json=payload, timeout=10)
-    except Exception as e:
-        print("Startup ping failed:", e)
-
 def check_deals():
-    send_test_message()
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
+    }
+    
+    # Startup verification message
+    try:
+        requests.post(
+            f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
+            json={"chat_id": CHANNEL_ID, "text": "🚀 Deals Tracker Live! Scanners active."},
+            timeout=10
+        )
+    except Exception:
+        pass
+
     while True:
-        try:
-            for cat in CATEGORIES:
-                encoded_query = quote(cat['query'])
-                rss_url = f"https://news.google.com/rss/search?q={encoded_query}&hl=en-IN&gl=IN&ceid=IN:en"
-                
-                resp = requests.get(rss_url, timeout=10)
+        for feed in FEEDS:
+            try:
+                resp = requests.get(feed["url"], headers=headers, timeout=15)
                 if resp.status_code == 200:
                     root = ET.fromstring(resp.content)
                     items = root.findall("./channel/item")
                     
-                    for item in items[:2]:
+                    for item in items[:4]:
                         title = item.find("title").text if item.find("title") is not None else ""
                         link = item.find("link").text if item.find("link") is not None else ""
                         
                         if not link or link in posted_urls:
                             continue
-                        
+                            
                         title_lower = title.lower()
-                        if any(bad in title_lower for bad in BLOCKED_WORDS):
+                        if any(b in title_lower for b in BLOCKED_WORDS):
                             continue
-                        
-                        if send_telegram_deal(title, link, cat):
+                            
+                        if send_telegram_deal(title, link, feed):
                             posted_urls.add(link)
-                            print(f"Posted: {cat['tag']} - {title}")
-                            time.sleep(10)
-                
-                time.sleep(15)
-        except Exception as e:
-            print("Scan Error:", e)
+                            print(f"[SUCCESS] Posted: {title}")
+                            time.sleep(12)
+            except Exception as e:
+                print(f"[FEED ERROR] {feed['tag']}:", e)
+            
+            time.sleep(10)
         
-        time.sleep(90)
+        # Prevent memory leaks
+        if len(posted_urls) > 300:
+            posted_urls.clear()
+            
+        time.sleep(45)
+
+# Self-pinger to keep Render from sleeping
+def keep_alive_ping():
+    while True:
+        time.sleep(300)  # every 5 minutes
+        try:
+            requests.get(RENDER_APP_URL, timeout=10)
+            print("[KEEP-ALIVE] Ping sent successfully")
+        except Exception:
+            pass
 
 class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.end_headers()
-        self.wfile.write(b"All-in-One Multi-Store Deals Bot Active")
+        self.wfile.write(b"Bot is online and working")
 
 def run_server():
     port = int(os.environ.get("PORT", 10000))
@@ -140,5 +139,8 @@ def run_server():
 if __name__ == "__main__":
     t_bot = threading.Thread(target=check_deals, daemon=True)
     t_bot.start()
-    run_server()
     
+    t_ping = threading.Thread(target=keep_alive_ping, daemon=True)
+    t_ping.start()
+    
+    run_server()
