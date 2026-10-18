@@ -1,14 +1,32 @@
-import requests
-import xml.etree.ElementTree as ET
+import os
 import re
 import time
+import threading
 from urllib.parse import quote
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import xml.etree.ElementTree as ET
+import requests
 
 BOT_TOKEN = "8883109486:AAHn2ZJIcyFPkJZ8By0H0lIBZPR5I6XHmEI"
 CHAT_ID = "@under50deals_india"
 
 posted_deals = set()
 BLOCKED_KEYWORDS = ["pass", "coupon", "voucher", "ticket", "subscription", "solved", "paper", "quiz", "membership"]
+
+class HealthServer(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/plain")
+        self.end_headers()
+        self.wfile.write(b"Bot is Running 24/7!")
+
+    def log_message(self, format, *args):
+        return
+
+def run_web_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), HealthServer)
+    server.serve_forever()
 
 def create_direct_shopping_link(clean_name, store):
     encoded_query = quote(clean_name)
@@ -74,6 +92,9 @@ def fetch_and_filter_deals():
     except Exception as e:
         print(f"Error: {e}")
 
+threading.Thread(target=run_web_server, daemon=True).start()
+
 while True:
     fetch_and_filter_deals()
     time.sleep(240)
+    
