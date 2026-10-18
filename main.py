@@ -6,14 +6,17 @@ from urllib.parse import quote
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
 
-# Credentials
-BOT_TOKEN = "8883109486:AAHn2ZJIcyFPkJZ8By0H0lIBZPR5I6XHmEI"
-CHANNEL_ID = "@under50deals_india"
+# ================= APNI DETAILS =================
+BOT_TOKEN = "8851245686:AAGSgnLfi3ysjHv_NL-lPxtl5xfm0rE4xck"
+CHANNEL_ID = "@under50_lootdeals"
 EARNKARO_USER_ID = "5726805"
 RENDER_APP_URL = "https://deals-bot-ycme.onrender.com"
+# ================================================
 
-# Verified Indian deals feed
-FEED_URL = "https://www.desidime.com/feed"
+FEEDS = [
+    "https://freekaamaal.com/feed",
+    "https://www.dealbee.in/feed/"
+]
 
 posted_urls = set()
 
@@ -26,7 +29,7 @@ def send_telegram_deal(title, item_url):
         f"🔥 LOOT DEAL ALERT!\n\n"
         f"📦 {clean_title}\n\n"
         f"✅ Verified Deal\n\n"
-        f"👇 Niche diye gaye link se buy karein aur cashback payein:"
+        f"👇 Niche diye gaye link se buy karein aur extra cashback payein:"
     )
     
     payload = {
@@ -46,7 +49,7 @@ def send_telegram_deal(title, item_url):
         res = requests.post(api_url, json=payload, timeout=12)
         return res.status_code == 200
     except Exception as e:
-        print("[Telegram Error]:", e)
+        print("[Telegram Post Error]:", e)
         return False
 
 def check_deals():
@@ -54,39 +57,39 @@ def check_deals():
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
     }
     
-    # Startup Alert
+    # Startup verification alert
     try:
         requests.post(
             f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-            json={"chat_id": CHANNEL_ID, "text": "🚀 Indian Deals Bot Online! Real loots active."},
+            json={"chat_id": CHANNEL_ID, "text": "🚀 Daily Loot Deals India Bot is Online!"},
             timeout=10
         )
-    except Exception:
-        pass
+    except Exception as e:
+        print("[Startup Msg Failed]:", e)
 
     while True:
-        try:
-            resp = requests.get(FEED_URL, headers=headers, timeout=15)
-            if resp.status_code == 200:
-                root = ET.fromstring(resp.content)
-                items = root.findall("./channel/item")
-                
-                for item in items[:5]:
-                    title = item.find("title").text if item.find("title") is not None else ""
-                    link = item.find("link").text if item.find("link") is not None else ""
+        for feed_url in FEEDS:
+            try:
+                resp = requests.get(feed_url, headers=headers, timeout=15)
+                if resp.status_code == 200:
+                    root = ET.fromstring(resp.content)
+                    items = root.findall("./channel/item")
                     
-                    if not link or link in posted_urls:
-                        continue
-                    
-                    if send_telegram_deal(title, link):
-                        posted_urls.add(link)
-                        print(f"[POSTED]: {title}")
-                        time.sleep(12)
-        except Exception as e:
-            print("[Fetch Error]:", e)
+                    for item in items[:4]:
+                        title = item.find("title").text if item.find("title") is not None else ""
+                        link = item.find("link").text if item.find("link") is not None else ""
+                        
+                        if not link or link in posted_urls:
+                            continue
+                        
+                        if send_telegram_deal(title, link):
+                            posted_urls.add(link)
+                            print(f"[POSTED]: {title}")
+                            time.sleep(12)
+            except Exception as e:
+                print(f"[Error reading {feed_url}]:", e)
         
-        # Memory cleanup
-        if len(posted_urls) > 500:
+        if len(posted_urls) > 300:
             posted_urls.clear()
             
         time.sleep(60)
@@ -103,7 +106,7 @@ class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.end_headers()
-        self.wfile.write(b"Bot is active")
+        self.wfile.write(b"Bot is healthy and running")
 
 def run_server():
     port = int(os.environ.get("PORT", 10000))
