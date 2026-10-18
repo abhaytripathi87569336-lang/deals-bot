@@ -7,7 +7,7 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
 
 # Configuration
-BOT_TOKEN = 8883109486:AAHn2ZJIcyFPkJZ8By0H0lIBZPR5I6XHmEI"
+BOT_TOKEN = "8883109486:AAHn2ZJIcyFPkJZ8By0H0lIBZPR5I6XHmEI"
 CHANNEL_ID = "@under50deals_india"
 EARNKARO_USER_ID = "5726805"
 
