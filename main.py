@@ -22,21 +22,20 @@ CATEGORIES = [
     },
     {
         "tag": "🎧 [TECH & ACCESSORIES UNDER ₹99]",
-        "query": "electronics earphones cables under 99 amazon",
+        "query": "tech accessories under 99 amazon",
         "btn_primary": "🔥 Grab Tech Loot",
         "btn_store": "📦 Amazon Tech Deals",
         "store_url": f"https://earnkaro.com?r={EARNKARO_USER_ID}&fname=amazon_tech"
     },
     {
         "tag": "👕 [FASHION 80-90% OFF STEAL]",
-        "query": "fashion loot 90 percent off amazon flipkart",
+        "query": "fashion sale discount amazon flipkart",
         "btn_primary": "👗 View Fashion Deal",
         "btn_store": "🏷️ 90% Off Fashion Store",
         "store_url": f"https://earnkaro.com?r={EARNKARO_USER_ID}&fname=fashion_loot"
     }
 ]
 
-# Blacklist unwanted keywords
 BLOCKED_WORDS = [
     "titan", "pass", "membership", "subscribe", "coupon code",
     "voucher", "rummy", "fantasy", "casino", "win real cash", "earning app"
@@ -80,11 +79,24 @@ def send_telegram_deal(title, item_url, cat):
         print("Telegram Send Error:", e)
         return False
 
+def send_test_message():
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": CHANNEL_ID,
+        "text": "🤖 *Deals Bot Online!*\n\nAmazon & Flipkart multi-category deals tracker fully active with auto-cashback links.",
+        "parse_mode": "Markdown"
+    }
+    try:
+        requests.post(url, json=payload, timeout=10)
+    except Exception as e:
+        print("Startup ping failed:", e)
+
 def check_deals():
+    send_test_message()
     while True:
         try:
             for cat in CATEGORIES:
-                encoded_query = quote(f"{cat['query']} when:1h")
+                encoded_query = quote(cat['query'])
                 rss_url = f"https://news.google.com/rss/search?q={encoded_query}&hl=en-IN&gl=IN&ceid=IN:en"
                 
                 resp = requests.get(rss_url, timeout=10)
@@ -106,14 +118,13 @@ def check_deals():
                         if send_telegram_deal(title, link, cat):
                             posted_urls.add(link)
                             print(f"Posted: {cat['tag']} - {title}")
-                            time.sleep(15)
+                            time.sleep(10)
                 
-                time.sleep(20)
+                time.sleep(15)
         except Exception as e:
             print("Scan Error:", e)
         
-        # Check every 3 minutes
-        time.sleep(180)
+        time.sleep(90)
 
 class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -130,3 +141,4 @@ if __name__ == "__main__":
     t_bot = threading.Thread(target=check_deals, daemon=True)
     t_bot.start()
     run_server()
+    
