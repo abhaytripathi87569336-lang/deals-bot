@@ -1,7 +1,8 @@
 import os
 import time
 import requests
-import feedparser
+import xml.etree.ElementTree as ET
+from urllib.parse import quote
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import threading
 
@@ -14,7 +15,7 @@ EARNKARO_USER_ID = "5726805"
 CATEGORIES = [
     {
         "tag": "⚡ [LOOT DEALS UNDER ₹50]",
-        "query": "loot deals under 50 amazon flipkart online sale",
+        "query": "loot deals under 50 amazon flipkart",
         "btn_primary": "🛒 Open Loot Deal",
         "btn_store": "🛍️ Flipkart Under ₹99",
         "store_url": f"https://earnkaro.com?r={EARNKARO_USER_ID}&fname=flipkart_deals"
@@ -28,14 +29,14 @@ CATEGORIES = [
     },
     {
         "tag": "👕 [FASHION 80-90% OFF STEAL]",
-        "query": "fashion loot 90 percent off amazon flipkart ajio",
+        "query": "fashion loot 90 percent off amazon flipkart",
         "btn_primary": "👗 View Fashion Deal",
         "btn_store": "🏷️ 90% Off Fashion Store",
         "store_url": f"https://earnkaro.com?r={EARNKARO_USER_ID}&fname=fashion_loot"
     }
 ]
 
-# Blacklist unwanted keywords / promotions
+# Blacklist unwanted keywords
 BLOCKED_WORDS = [
     "titan", "pass", "membership", "subscribe", "coupon code",
     "voucher", "rummy", "fantasy", "casino", "win real cash", "earning app"
@@ -44,7 +45,6 @@ BLOCKED_WORDS = [
 posted_urls = set()
 
 def send_telegram_deal(title, item_url, cat):
-    # Automated monetized redirect link via your EarnKaro ID
     monetized_primary = f"https://earnkaro.com?r={EARNKARO_USER_ID}&fname=deal"
     
     caption = (
@@ -84,30 +84,35 @@ def check_deals():
     while True:
         try:
             for cat in CATEGORIES:
-                rss_url = f"https://news.google.com/rss/search?q={cat['query'].replace(' ', '+')}+when:1h&hl=en-IN&gl=IN&ceid=IN:en"
-                feed = feedparser.parse(rss_url)
+                encoded_query = quote(f"{cat['query']} when:1h")
+                rss_url = f"https://news.google.com/rss/search?q={encoded_query}&hl=en-IN&gl=IN&ceid=IN:en"
                 
-                for entry in feed.entries[:2]:
-                    title = entry.title
-                    link = entry.link
+                resp = requests.get(rss_url, timeout=10)
+                if resp.status_code == 200:
+                    root = ET.fromstring(resp.content)
+                    items = root.findall("./channel/item")
                     
-                    if link in posted_urls:
-                        continue
-                    
-                    title_lower = title.lower()
-                    if any(bad in title_lower for bad in BLOCKED_WORDS):
-                        continue
-                    
-                    if send_telegram_deal(title, link, cat):
-                        posted_urls.add(link)
-                        print(f"Posted: {cat['tag']} - {title}")
-                        time.sleep(15)
+                    for item in items[:2]:
+                        title = item.find("title").text if item.find("title") is not None else ""
+                        link = item.find("link").text if item.find("link") is not None else ""
+                        
+                        if not link or link in posted_urls:
+                            continue
+                        
+                        title_lower = title.lower()
+                        if any(bad in title_lower for bad in BLOCKED_WORDS):
+                            continue
+                        
+                        if send_telegram_deal(title, link, cat):
+                            posted_urls.add(link)
+                            print(f"Posted: {cat['tag']} - {title}")
+                            time.sleep(15)
                 
                 time.sleep(20)
         except Exception as e:
             print("Scan Error:", e)
         
-        # Check feeds every 3 minutes
+        # Check every 3 minutes
         time.sleep(180)
 
 class HealthHandler(BaseHTTPRequestHandler):
