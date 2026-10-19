@@ -1,19 +1,31 @@
 import os
 import time
+import threading
 import urllib.parse
+from http.server import HTTPServer, BaseHTTPRequestHandler
 import requests
 import telebot
 
-# Bot Token Render Environment Variables se aayega
+# Bot Token & Config
 BOT_TOKEN = "8851245686:AAGSgnLfi3ysjHv_NL-lPxtl5xfm0rE4xck"
-
-# Aapke channel ka direct username aur EarnKaro referral ID
 CHANNEL_ID = "@under50_lootdeals"
 EARNKARO_ID = "5726805"
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# Open India Deals feed (No Cloudflare blocking)
+# Dummy web server for Render port binding
+class SimpleHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"Bot is running 24/7!")
+
+def run_server():
+    port = int(os.environ.get("PORT", 8080))
+    server = HTTPServer(("0.0.0.0", port), SimpleHandler)
+    server.serve_forever()
+
+# Open India Deals feed
 DEALS_URL = "https://www.reddit.com/r/IndianBeautyDeals/new.json?limit=10"
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 
@@ -44,7 +56,6 @@ def check_and_post_deals():
 
             posted_ids.add(post_id)
 
-            # Link convert karna EarnKaro format mein
             if "http" in str(url) and "reddit.com" not in str(url):
                 aff_link = make_earnkaro_link(url)
             else:
@@ -58,13 +69,17 @@ def check_and_post_deals():
             )
 
             bot.send_message(CHANNEL_ID, caption, parse_mode="Markdown")
-            print(f"Posted deal: {title[:30]}...")
+            print(f"Posted: {title[:30]}...")
             time.sleep(3)
 
     except Exception as e:
         print(f"Error checking deals: {e}")
 
 if __name__ == "__main__":
+    print("Starting web server for Render...")
+    server_thread = threading.Thread(target=run_server, daemon=True)
+    server_thread.start()
+
     print("Bot starting up...")
     try:
         bot.send_message(CHANNEL_ID, "🚀 Daily Loot Deals Bot is LIVE & Ready!")
@@ -73,4 +88,4 @@ if __name__ == "__main__":
 
     while True:
         check_and_post_deals()
-        time.sleep(120)  # Har 2 minute me deals check karega
+        time.sleep(120)
