@@ -1,119 +1,76 @@
 import os
 import time
+import urllib.parse
 import requests
-import xml.etree.ElementTree as ET
-from urllib.parse import quote
-from http.server import HTTPServer, BaseHTTPRequestHandler
-import threading
+import telebot
 
-# ================= APNI DETAILS =================
+# Bot Token Render Environment Variables se aayega
 BOT_TOKEN = "8851245686:AAGSgnLfi3ysjHv_NL-lPxtl5xfm0rE4xck"
+
+# Aapke channel ka direct username aur EarnKaro referral ID
 CHANNEL_ID = "@under50_lootdeals"
-EARNKARO_USER_ID = "5726805"
-RENDER_APP_URL = "https://deals-bot-ycme.onrender.com"
-# ================================================
+EARNKARO_ID = "5726805"
 
-FEEDS = [
-    "https://freekaamaal.com/feed",
-    "https://www.dealbee.in/feed/"
-]
+bot = telebot.TeleBot(BOT_TOKEN)
 
-posted_urls = set()
+# Open India Deals feed (No Cloudflare blocking)
+DEALS_URL = "https://www.reddit.com/r/IndianBeautyDeals/new.json?limit=10"
+HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 
-def send_telegram_deal(title, item_url):
-    clean_title = title.split(" - ")[0].strip()
-    encoded_url = quote(item_url, safe="")
-    monetized_link = f"https://earnkaro.com?r={EARNKARO_USER_ID}&url={encoded_url}"
-    
-    caption = (
-        f"🔥 LOOT DEAL ALERT!\n\n"
-        f"📦 {clean_title}\n\n"
-        f"✅ Verified Deal\n\n"
-        f"👇 Niche diye gaye link se buy karein aur extra cashback payein:"
-    )
-    
-    payload = {
-        "chat_id": CHANNEL_ID,
-        "text": caption,
-        "disable_web_page_preview": False,
-        "reply_markup": {
-            "inline_keyboard": [
-                [{"text": "🛒 Buy Now / Grab Deal", "url": monetized_link}],
-                [{"text": "🛍️ Flipkart Under ₹99", "url": f"https://earnkaro.com?r={EARNKARO_USER_ID}&fname=flipkart_deals"}]
-            ]
-        }
-    }
-    
-    api_url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+posted_ids = set()
+
+def make_earnkaro_link(target_url):
+    encoded = urllib.parse.quote(target_url, safe="")
+    return f"https://earnkaro.com?r={EARNKARO_ID}&url={encoded}"
+
+def check_and_post_deals():
     try:
-        res = requests.post(api_url, json=payload, timeout=12)
-        return res.status_code == 200
+        response = requests.get(DEALS_URL, headers=HEADERS, timeout=15)
+        if response.status_code != 200:
+            print(f"Feed check status: {response.status_code}")
+            return
+
+        data = response.json()
+        posts = data.get("data", {}).get("children", [])
+
+        for post in posts:
+            p_data = post.get("data", {})
+            post_id = p_data.get("id")
+            title = p_data.get("title", "")
+            url = p_data.get("url_overridden_by_dest") or p_data.get("url")
+
+            if not post_id or post_id in posted_ids:
+                continue
+
+            posted_ids.add(post_id)
+
+            # Link convert karna EarnKaro format mein
+            if "http" in str(url) and "reddit.com" not in str(url):
+                aff_link = make_earnkaro_link(url)
+            else:
+                aff_link = f"https://earnkaro.com?r={EARNKARO_ID}"
+
+            caption = (
+                f"🔥 *SUPER LOOT DEAL* 🔥\n\n"
+                f"📌 {title}\n\n"
+                f"🛒 *Buy / Check Deal:*\n{aff_link}\n\n"
+                f"⚡ Jaldi loots out of stock hone se pehle order karein!"
+            )
+
+            bot.send_message(CHANNEL_ID, caption, parse_mode="Markdown")
+            print(f"Posted deal: {title[:30]}...")
+            time.sleep(3)
+
     except Exception as e:
-        print("[Telegram Post Error]:", e)
-        return False
-
-def check_deals():
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36"
-    }
-    
-    # Startup verification alert
-    try:
-        requests.post(
-            f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage",
-            json={"chat_id": CHANNEL_ID, "text": "🚀 Daily Loot Deals India Bot is Online!"},
-            timeout=10
-        )
-    except Exception as e:
-        print("[Startup Msg Failed]:", e)
-
-    while True:
-        for feed_url in FEEDS:
-            try:
-                resp = requests.get(feed_url, headers=headers, timeout=15)
-                if resp.status_code == 200:
-                    root = ET.fromstring(resp.content)
-                    items = root.findall("./channel/item")
-                    
-                    for item in items[:4]:
-                        title = item.find("title").text if item.find("title") is not None else ""
-                        link = item.find("link").text if item.find("link") is not None else ""
-                        
-                        if not link or link in posted_urls:
-                            continue
-                        
-                        if send_telegram_deal(title, link):
-                            posted_urls.add(link)
-                            print(f"[POSTED]: {title}")
-                            time.sleep(12)
-            except Exception as e:
-                print(f"[Error reading {feed_url}]:", e)
-        
-        if len(posted_urls) > 300:
-            posted_urls.clear()
-            
-        time.sleep(60)
-
-def keep_alive():
-    while True:
-        time.sleep(240)
-        try:
-            requests.get(RENDER_APP_URL, timeout=10)
-        except Exception:
-            pass
-
-class HealthHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        self.send_response(200)
-        self.end_headers()
-        self.wfile.write(b"Bot is healthy and running")
-
-def run_server():
-    port = int(os.environ.get("PORT", 10000))
-    server = HTTPServer(("0.0.0.0", port), HealthHandler)
-    server.serve_forever()
+        print(f"Error checking deals: {e}")
 
 if __name__ == "__main__":
-    threading.Thread(target=check_deals, daemon=True).start()
-    threading.Thread(target=keep_alive, daemon=True).start()
-    run_server()
+    print("Bot starting up...")
+    try:
+        bot.send_message(CHANNEL_ID, "🚀 Daily Loot Deals Bot is LIVE & Ready!")
+    except Exception as e:
+        print(f"Telegram start msg failed: {e}")
+
+    while True:
+        check_and_post_deals()
+        time.sleep(120)  # Har 2 minute me deals check karega
